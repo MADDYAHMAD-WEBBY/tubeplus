@@ -60,7 +60,7 @@ export default function Home() {
     try {
       setProgressPercentage(100);
 
-      const downloadUrl = `${WORKER_API_BASE}/api/proxy-stream?streamUrl=${encodeURIComponent(fmt.url)}`;
+      const downloadUrl = `${WORKER_API_BASE}/api/proxy-stream?streamUrl=${encodeURIComponent(fmt.url)}&title=${encodeURIComponent(safeTitle)}`;
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = `${safeTitle} [${qualityHeight}p].mp4`;
