@@ -32,11 +32,28 @@ export default function Home() {
 
     try {
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/api/info?url=${encodeURIComponent(inputUrl)}`);
-      const data = await res.json();
+      let data: VideoMetaData | null = null;
 
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Failed to fetch YouTube video metadata');
+      if (apiBase) {
+        try {
+          const res = await fetch(`${apiBase}/api/info?url=${encodeURIComponent(inputUrl)}`);
+          if (res.ok) {
+            const resData = await res.json();
+            if (resData && resData.formats && resData.formats.length > 0) {
+              data = resData;
+            }
+          }
+        } catch (workerErr) {}
+      }
+
+      // Local API server fallback (uses yt-dlp binary with 100% video format extraction)
+      if (!data) {
+        const localRes = await fetch(`/api/info?url=${encodeURIComponent(inputUrl)}`);
+        const localData = await localRes.json();
+        if (!localRes.ok || localData.error) {
+          throw new Error(localData.error || 'Failed to fetch YouTube video metadata');
+        }
+        data = localData;
       }
 
       setVideoMeta(data);
