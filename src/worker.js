@@ -216,17 +216,20 @@ async function handleVideoInfo(url) {
     
     if (!streamUrl && f.signatureCipher) {
       const params = new URLSearchParams(f.signatureCipher);
-      streamUrl = params.get("url");
+      const baseUrl = params.get("url");
+      const sig = params.get("s") || params.get("sig") || params.get("signature");
+      if (baseUrl) {
+        streamUrl = sig ? `${baseUrl}&sig=${encodeURIComponent(sig)}` : baseUrl;
+      }
     }
 
     if (!streamUrl && f.cipher) {
       const params = new URLSearchParams(f.cipher);
-      streamUrl = params.get("url");
-    }
-
-    // Fallback stream URL if url was omitted in client response
-    if (!streamUrl && f.itag) {
-      streamUrl = `https://yt-downloader-api.tubeplus.workers.dev/api/proxy-stream?v=${videoId}&itag=${f.itag}`;
+      const baseUrl = params.get("url");
+      const sig = params.get("s") || params.get("sig") || params.get("signature");
+      if (baseUrl) {
+        streamUrl = sig ? `${baseUrl}&sig=${encodeURIComponent(sig)}` : baseUrl;
+      }
     }
 
     if (!streamUrl) continue;
