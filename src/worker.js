@@ -156,47 +156,54 @@ async function handleVideoInfo(url) {
     }
   } catch (e) {}
 
-  // Step 2: InnerTube Multi-Client Extraction
-  for (const clientConfig of INNERTUBE_CLIENTS) {
-    try {
-      const res = await fetch("https://www.youtube.com/youtubei/v1/player", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": clientConfig.userAgent,
-          "X-YouTube-Client-Name": clientConfig.clientNameHeader,
-          "X-YouTube-Client-Version": clientConfig.clientVersionHeader
-        },
-        body: JSON.stringify(clientConfig.payload(videoId))
-      });
+  // Step 2: Extract Streaming Formats via YouTube Mobile Watch Page HTML (100% Direct URLs)
+  try {
+    const isShort = target?.includes('/shorts/') || false;
+    const watchUrl = isShort 
+      ? `https://www.youtube.com/shorts/${videoId}` 
+      : `https://www.youtube.com/watch?v=${videoId}`;
 
-      if (!res.ok) continue;
-      const data = await res.json();
-
-      if (data && data.streamingData && (data.streamingData.formats?.length || data.streamingData.adaptiveFormats?.length)) {
-        playerResponse = data;
-        break;
+    const htmlRes = await fetch(watchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       }
-    } catch (e) {}
-  }
+    });
 
-  // Step 3: Watch Page HTML Extraction Fallback
+    if (htmlRes.ok) {
+      const html = await htmlRes.text();
+      const parsed = extractJsonObj(html, /ytInitialPlayerResponse\s*=\s*{/);
+      if (parsed && parsed.streamingData && (parsed.streamingData.formats?.length || parsed.streamingData.adaptiveFormats?.length)) {
+        playerResponse = parsed;
+      }
+    }
+  } catch (htmlErr) {}
+
+  // Step 3: InnerTube Rotated Multi-Client Context Fallback
   if (!playerResponse || !playerResponse.streamingData) {
-    try {
-      const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-          "Accept-Language": "en-US,en;q=0.9"
+    for (const clientConfig of INNERTUBE_CLIENTS) {
+      try {
+        const res = await fetch("https://www.youtube.com/youtubei/v1/player", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": clientConfig.userAgent,
+            "X-YouTube-Client-Name": clientConfig.clientNameHeader,
+            "X-YouTube-Client-Version": clientConfig.clientVersionHeader
+          },
+          body: JSON.stringify(clientConfig.payload(videoId))
+        });
+
+        if (!res.ok) continue;
+        const data = await res.json();
+
+        if (data && data.streamingData && (data.streamingData.formats?.length || data.streamingData.adaptiveFormats?.length)) {
+          playerResponse = data;
+          break;
         }
-      });
-      if (watchRes.ok) {
-        const html = await watchRes.text();
-        const parsed = extractJsonObj(html, /ytInitialPlayerResponse\s*=\s*{/);
-        if (parsed && parsed.streamingData) {
-          playerResponse = parsed;
-        }
-      }
-    } catch (watchErr) {}
+      } catch (e) {}
+    }
   }
 
   const videoDetails = playerResponse?.videoDetails || {};
