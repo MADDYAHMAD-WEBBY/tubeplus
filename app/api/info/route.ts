@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { extractVideoId } from '../../utils/youtube';
 
+export const dynamic = 'force-static';
+
 function runYtDlp(targetUrl: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const binaryPath = 'C:\\Users\\Hammad\\yt-dlp.exe';

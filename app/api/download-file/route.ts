@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
+export const dynamic = 'force-static';
+
 // Periodic cleanup of temp files older than 15 minutes
 function cleanupOldTempFiles() {
   try {
