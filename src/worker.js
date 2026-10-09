@@ -349,12 +349,32 @@ function extractJsonObj(html, startPattern) {
 }
 
 /**
- * Optional Proxy Stream route to handle byte-range CDN requests directly
+ * Proxy Stream route to handle byte-range CDN streaming requests directly
  */
 async function handleProxyStream(request, url) {
-  const targetUrl = url.searchParams.get("streamUrl");
-  if (!targetUrl) {
-    return new Response("Missing streamUrl parameter", { status: 400, headers: CORS_HEADERS });
+  let targetUrl = url.searchParams.get("streamUrl");
+  const videoId = url.searchParams.get("v");
+  const itag = url.searchParams.get("itag");
+
+  if (!targetUrl && (!videoId || !itag)) {
+    return new Response("Missing streamUrl or video parameter", { status: 400, headers: CORS_HEADERS });
+  }
+
+  // Resolve direct URL if self-referential
+  if (!targetUrl || targetUrl.includes("proxy-stream")) {
+    const vid = videoId || extractVideoId(targetUrl);
+    if (vid) {
+      const infoRes = await handleVideoInfo(new URL(`https://worker/api/info?v=${vid}`));
+      const infoData = await infoRes.json();
+      const fmt = infoData.formats?.find((f) => String(f.itag) === String(itag)) || infoData.formats?.[0];
+      if (fmt && fmt.url && !fmt.url.includes("proxy-stream")) {
+        targetUrl = fmt.url;
+      }
+    }
+  }
+
+  if (!targetUrl || targetUrl.includes("proxy-stream")) {
+    return new Response("Unable to resolve streaming CDN URL", { status: 500, headers: CORS_HEADERS });
   }
 
   const rangeHeader = request.headers.get("Range");
@@ -379,6 +399,10 @@ async function handleProxyStream(request, url) {
       responseHeaders.set(h, response.headers.get(h));
     }
   });
+
+  if (!responseHeaders.has("Content-Disposition")) {
+    responseHeaders.set("Content-Disposition", 'attachment; filename="video.mp4"');
+  }
 
   return new Response(response.body, {
     status: response.status,
