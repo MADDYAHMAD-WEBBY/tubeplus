@@ -16,6 +16,13 @@ export default function Home() {
   const [preparingItag, setPreparingItag] = useState<string | number | null>(null);
   const [progressPercentage, setProgressPercentage] = useState<number>(0);
 
+  const getApiBaseUrl = () => {
+    if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
+      return 'https://yt-downloader-api.tubeplus.workers.dev';
+    }
+    return '';
+  };
+
   const handleFetchInfo = async (inputUrl: string) => {
     setLoadingInfo(true);
     setErrorMsg(null);
@@ -24,7 +31,8 @@ export default function Home() {
     setProgressPercentage(0);
 
     try {
-      const res = await fetch(`/api/info?url=${encodeURIComponent(inputUrl)}`);
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/info?url=${encodeURIComponent(inputUrl)}`);
       const data = await res.json();
 
       if (!res.ok || data.error) {
@@ -47,11 +55,32 @@ export default function Home() {
 
     const qualityHeight = fmt.height || (fmt.qualityLabel.includes('1080') ? 1080 : fmt.qualityLabel.includes('720') ? 720 : 480);
     const safeTitle = videoMeta.title.replace(/[/\\?%*:|"<>]/g, '_');
+    const apiBase = getApiBaseUrl();
 
     setPreparingItag(fmt.itag);
     setProgressPercentage(25);
 
     try {
+      if (apiBase) {
+        // Live Cloudflare Worker Production Stream
+        setProgressPercentage(100);
+
+        const downloadUrl = `${apiBase}/api/proxy-stream?streamUrl=${encodeURIComponent(fmt.url)}`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${safeTitle} [${qualityHeight}p].mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(() => {
+          setPreparingItag(null);
+          setProgressPercentage(0);
+        }, 1500);
+        return;
+      }
+
+      // Local Node.js Backend Server FFmpeg Muxing
       const res = await fetch(`/api/prepare-merge?v=${videoMeta.id}&title=${encodeURIComponent(safeTitle)}&quality=${qualityHeight}&itag=${fmt.itag}`);
       const data = await res.json();
 
