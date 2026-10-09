@@ -387,36 +387,12 @@ async function handleProxyStream(request, url) {
     return new Response("Unable to resolve streaming CDN URL", { status: 500, headers: CORS_HEADERS });
   }
 
-  const rangeHeader = request.headers.get("Range");
-  const fetchHeaders = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-  };
-  if (rangeHeader) {
-    fetchHeaders["Range"] = rangeHeader;
-  }
-
-  const response = await fetch(targetUrl, { headers: fetchHeaders });
-  const responseHeaders = new Headers(CORS_HEADERS);
-  
-  [
-    "content-type",
-    "content-length",
-    "content-range",
-    "accept-ranges",
-    "cache-control"
-  ].forEach((h) => {
-    if (response.headers.has(h)) {
-      responseHeaders.set(h, response.headers.get(h));
+  // Return HTTP 302 Redirect directly to Google CDN video stream for maximum speed & zero ERR_INVALID_RESPONSE
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...CORS_HEADERS,
+      "Location": targetUrl
     }
-  });
-
-  if (!responseHeaders.has("Content-Disposition")) {
-    responseHeaders.set("Content-Disposition", 'attachment; filename="video.mp4"');
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseHeaders
   });
 }
