@@ -5,8 +5,6 @@ import fs from 'fs';
 import os from 'os';
 import { extractVideoId } from '../../utils/youtube';
 
-export const dynamic = 'force-static';
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const target = searchParams.get('url') || searchParams.get('v') || searchParams.get('id');
