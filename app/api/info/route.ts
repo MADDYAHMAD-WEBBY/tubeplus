@@ -9,6 +9,7 @@ function runYtDlp(targetUrl: string): Promise<any> {
 
     const args = [
       '--js-runtimes', `node:${nodePath}`,
+      '--extractor-args', 'youtube:player_client=android,ios,web',
       '-j',
       '--',
       targetUrl
