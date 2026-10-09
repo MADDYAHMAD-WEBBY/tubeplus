@@ -34,26 +34,39 @@ export default function Home() {
       const apiBase = getApiBaseUrl();
       let data: VideoMetaData | null = null;
 
+      // 1. Try Primary Cloudflare Worker / API endpoint
       if (apiBase) {
         try {
           const res = await fetch(`${apiBase}/api/info?url=${encodeURIComponent(inputUrl)}`);
           if (res.ok) {
             const resData = await res.json();
-            if (resData && resData.formats && resData.formats.length > 0) {
+            if (resData && !resData.error && resData.formats && resData.formats.length > 0) {
               data = resData;
+            } else if (resData && !resData.error) {
+              data = resData; // Keep meta even if formats empty for local fallback
             }
           }
         } catch (workerErr) {}
       }
 
-      // Local API server fallback (uses yt-dlp binary with 100% video format extraction)
-      if (!data) {
-        const localRes = await fetch(`/api/info?url=${encodeURIComponent(inputUrl)}`);
-        const localData = await localRes.json();
-        if (!localRes.ok || localData.error) {
-          throw new Error(localData.error || 'Failed to fetch YouTube video metadata');
-        }
-        data = localData;
+      // 2. Try Local Server fallback if available (uses yt-dlp binary with 100% resolution extraction)
+      if (!data || !data.formats || data.formats.length === 0) {
+        const isLocalHost = typeof window !== 'undefined' && (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'));
+        const localEndpoint = isLocalHost ? '/api/info' : 'http://localhost:3000/api/info';
+
+        try {
+          const localRes = await fetch(`${localEndpoint}?url=${encodeURIComponent(inputUrl)}`);
+          if (localRes.ok) {
+            const localData = await localRes.json();
+            if (localData && !localData.error && localData.formats && localData.formats.length > 0) {
+              data = localData;
+            }
+          }
+        } catch (localErr) {}
+      }
+
+      if (!data || !data.formats || data.formats.length === 0) {
+        throw new Error('Unable to extract video formats. Please verify the URL or ensure your local dev server (npm run dev) is running.');
       }
 
       setVideoMeta(data);
