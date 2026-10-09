@@ -16,12 +16,7 @@ export default function Home() {
   const [preparingItag, setPreparingItag] = useState<string | number | null>(null);
   const [progressPercentage, setProgressPercentage] = useState<number>(0);
 
-  const getApiBaseUrl = () => {
-    if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
-      return 'https://yt-downloader-api.tubeplus.workers.dev';
-    }
-    return '';
-  };
+  const WORKER_API_BASE = 'https://yt-downloader-api.tubeplus.workers.dev';
 
   const handleFetchInfo = async (inputUrl: string) => {
     setLoadingInfo(true);
@@ -31,42 +26,15 @@ export default function Home() {
     setProgressPercentage(0);
 
     try {
-      const apiBase = getApiBaseUrl();
-      let data: VideoMetaData | null = null;
+      const res = await fetch(`${WORKER_API_BASE}/api/info?url=${encodeURIComponent(inputUrl)}`);
+      const data = await res.json();
 
-      // 1. Try Primary Cloudflare Worker / API endpoint
-      if (apiBase) {
-        try {
-          const res = await fetch(`${apiBase}/api/info?url=${encodeURIComponent(inputUrl)}`);
-          if (res.ok) {
-            const resData = await res.json();
-            if (resData && !resData.error && resData.formats && resData.formats.length > 0) {
-              data = resData;
-            } else if (resData && !resData.error) {
-              data = resData; // Keep meta even if formats empty for local fallback
-            }
-          }
-        } catch (workerErr) {}
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to fetch YouTube video metadata');
       }
 
-      // 2. Try Local Server fallback if available (uses yt-dlp binary with 100% resolution extraction)
-      if (!data || !data.formats || data.formats.length === 0) {
-        const isLocalHost = typeof window !== 'undefined' && (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'));
-        const localEndpoint = isLocalHost ? '/api/info' : 'http://localhost:3000/api/info';
-
-        try {
-          const localRes = await fetch(`${localEndpoint}?url=${encodeURIComponent(inputUrl)}`);
-          if (localRes.ok) {
-            const localData = await localRes.json();
-            if (localData && !localData.error && localData.formats && localData.formats.length > 0) {
-              data = localData;
-            }
-          }
-        } catch (localErr) {}
-      }
-
-      if (!data || !data.formats || data.formats.length === 0) {
-        throw new Error('Unable to extract video formats. Please verify the URL or ensure your local dev server (npm run dev) is running.');
+      if (!data.formats || data.formats.length === 0) {
+        throw new Error('No downloadable streaming formats found for this video.');
       }
 
       setVideoMeta(data);
@@ -78,52 +46,24 @@ export default function Home() {
   };
 
   /**
-   * Fast Inline Download Preparation
+   * Fast Standalone Cloudflare Worker Stream Download
    */
   const handlePrepareMerge = async (fmt: VideoFormat) => {
     if (!videoMeta) return;
 
     const qualityHeight = fmt.height || (fmt.qualityLabel.includes('1080') ? 1080 : fmt.qualityLabel.includes('720') ? 720 : 480);
     const safeTitle = videoMeta.title.replace(/[/\\?%*:|"<>]/g, '_');
-    const apiBase = getApiBaseUrl();
 
     setPreparingItag(fmt.itag);
     setProgressPercentage(25);
 
     try {
-      if (apiBase) {
-        // Live Cloudflare Worker Production Stream
-        setProgressPercentage(100);
-
-        const downloadUrl = `${apiBase}/api/proxy-stream?streamUrl=${encodeURIComponent(fmt.url)}`;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `${safeTitle} [${qualityHeight}p].mp4`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        setTimeout(() => {
-          setPreparingItag(null);
-          setProgressPercentage(0);
-        }, 1500);
-        return;
-      }
-
-      // Local Node.js Backend Server FFmpeg Muxing
-      const res = await fetch(`/api/prepare-merge?v=${videoMeta.id}&title=${encodeURIComponent(safeTitle)}&quality=${qualityHeight}&itag=${fmt.itag}`);
-      const data = await res.json();
-
-      if (!res.ok || !data.readyUrl) {
-        throw new Error(data.error || 'Failed to prepare video file');
-      }
-
       setProgressPercentage(100);
 
-      // Trigger Browser Download
+      const downloadUrl = `${WORKER_API_BASE}/api/proxy-stream?streamUrl=${encodeURIComponent(fmt.url)}`;
       const a = document.createElement('a');
-      a.href = data.readyUrl;
-      a.download = data.filename || `${safeTitle} [${qualityHeight}p].mp4`;
+      a.href = downloadUrl;
+      a.download = `${safeTitle} [${qualityHeight}p].mp4`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -131,7 +71,7 @@ export default function Home() {
       setTimeout(() => {
         setPreparingItag(null);
         setProgressPercentage(0);
-      }, 2000);
+      }, 1500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Video download preparation failed');
       setPreparingItag(null);
